@@ -1,11 +1,23 @@
 /* Molly the turtuise
 IR controlled version
 by Lev Kunin lev.y.kunin@gmail.com
-*/
 
+IR Remote Control Features:
+
+Key 1: Toggle robot on/off
+Key 2: Start continuous walking
+Key 3: Stop robot
+Arrow keys: Manual control of individual limbs
+
+UP: Left arm step
+DOWN: Right arm step
+LEFT: Left leg step
+RIGHT: Right leg step
+
+*/
 #include <DIYables_IRcontroller.h>
 #include <Servo.h>
-#define IR_RECEIVER_PIN 7 // The Arduino pin connected to IR controller
+#define IR_RECEIVER_PIN 45 // The Arduino pin connected to IR controller
 
 DIYables_IRcontroller_17 irController(IR_RECEIVER_PIN, 200); // debounce time is 200ms
 Servo right_elbow;
@@ -63,6 +75,20 @@ int rightArmStepState = 0;
 int leftLegStepState = 0;
 int rightLegStepState = 0;
 int turnRightStepState = 0;
+
+// Function declarations
+void startServoMove(Servo* servo, int angle, int delayMs = default_delay_ms);
+bool executeLeftArmStep();
+bool executeRightArmStep();
+bool executeLeftLegStep();
+bool executeRightLegStep();
+bool executeTurnRight();
+void handleIRCommands();
+void handleServoMovement(unsigned long currentMillis);
+void handleRobotStateMachine(unsigned long currentMillis);
+float get_distance();
+bool is_too_close();
+void initializeServos();
 
 void setup() {   
   // distance sensor setup
