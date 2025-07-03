@@ -15,6 +15,8 @@ LEFT: Left leg step
 RIGHT: Right leg step
 
 */
+
+
 #include <DIYables_IRcontroller.h>
 #include <Servo.h>
 #define IR_RECEIVER_PIN 45 // The Arduino pin connected to IR controller
@@ -141,6 +143,10 @@ void handleIRCommands() {
         if (!robotEnabled) {
           currentState = IDLE;
           servoState = SERVO_IDLE;
+        } else {
+          // Robot is being enabled - initialize servos to default positions
+          initializeServos();
+          Serial.println("Robot ready for commands - servos initialized");
         }
         break;
       case Key17::KEY_2:
