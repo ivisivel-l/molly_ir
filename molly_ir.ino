@@ -19,7 +19,7 @@ RIGHT: Right leg step
 
 #include <DIYables_IRcontroller.h>
 #include <Servo.h>
-#define IR_RECEIVER_PIN 45 // The Arduino pin connected to IR controller
+#define IR_RECEIVER_PIN 14 // The Arduino pin connected to IR controller
 
 DIYables_IRcontroller_17 irController(IR_RECEIVER_PIN, 200); // debounce time is 200ms
 Servo right_elbow;
@@ -30,6 +30,7 @@ Servo left_leg;
 Servo right_leg;
 Servo right_foot;
 Servo left_foot;
+
 
 int default_delay_ms = 2;
 const int trigPin = 2;
@@ -80,12 +81,12 @@ int turnRightStepState = 0;
 
 // Function declarations
 void startServoMove(Servo* servo, int angle, int delayMs = default_delay_ms);
-bool executeLeftArmStep();
-bool executeRightArmStep();
-bool executeLeftLegStep();
-bool executeRightLegStep();
-bool executeTurnRight();
-void handleIRCommands();
+bool left_arm_step_forward();
+bool right_arm_step_forward();
+bool left_leg_step_forward();
+bool right_leg_step_forward();
+bool turn_right();
+void do_what_you_are_told_on_ir();
 void handleServoMovement(unsigned long currentMillis);
 void handleRobotStateMachine(unsigned long currentMillis);
 float get_distance();
@@ -121,7 +122,7 @@ void loop() {
   unsigned long currentMillis = millis();
   
   // Always check for IR commands
-  handleIRCommands();
+  do_what_you_are_told_on_ir();
   
   // Only run robot logic if enabled
   if (robotEnabled) {
@@ -133,7 +134,7 @@ void loop() {
   }
 }
 
-void handleIRCommands() {
+void do_what_you_are_told_on_ir() {
   Key17 key = irController.getKey();
   if (key != Key17::NONE) {
     switch (key) {
@@ -190,6 +191,11 @@ void handleIRCommands() {
           rightLegStepState = 0;
         }
         break;
+      case Key17::KEY_OK :
+        Serial.println("OK");
+        // TODO: YOUR CONTROL
+        break;
+
       default:
         break;
     }
@@ -228,7 +234,7 @@ void handleRobotStateMachine(unsigned long currentMillis) {
           break;
         }
         
-        if (executeLeftArmStep()) {
+        if (left_arm_step_forward()) {
           // Step completed, move to next in sequence or next step
           if (stepSequence >= 0) {
             currentState = RIGHT_ARM_STEP;
@@ -249,7 +255,7 @@ void handleRobotStateMachine(unsigned long currentMillis) {
           break;
         }
         
-        if (executeRightArmStep()) {
+        if (right_arm_step_forward()) {
           if (stepSequence >= 0) {
             currentState = LEFT_LEG_STEP;
             leftLegStepState = 0;
@@ -269,7 +275,7 @@ void handleRobotStateMachine(unsigned long currentMillis) {
           break;
         }
         
-        if (executeLeftLegStep()) {
+        if (left_leg_step_forward()) {
           if (stepSequence >= 0) {
             currentState = RIGHT_LEG_STEP;
             rightLegStepState = 0;
@@ -289,7 +295,7 @@ void handleRobotStateMachine(unsigned long currentMillis) {
           break;
         }
         
-        if (executeRightLegStep()) {
+        if (right_leg_step_forward()) {
           if (stepSequence >= 0) {
             // Continue walking - restart sequence
             currentState = LEFT_ARM_STEP;
@@ -305,7 +311,7 @@ void handleRobotStateMachine(unsigned long currentMillis) {
       
     case TURNING_RIGHT:
       if (servoState == SERVO_IDLE) {
-        if (executeTurnRight()) {
+        if (turn_right()) {
           // Turn completed, check if still too close
           if (navigate && is_too_close()) {
             // Still too close, keep turning
@@ -321,7 +327,7 @@ void handleRobotStateMachine(unsigned long currentMillis) {
   }
 }
 
-bool executeLeftArmStep() {
+bool left_arm_step_forward() {
   switch (leftArmStepState) {
     case 0:
       startServoMove(&left_elbow, 0);
@@ -343,7 +349,7 @@ bool executeLeftArmStep() {
   return false;
 }
 
-bool executeRightArmStep() {
+bool right_arm_step_forward() {
   switch (rightArmStepState) {
     case 0:
       startServoMove(&right_elbow, 180);
@@ -365,7 +371,7 @@ bool executeRightArmStep() {
   return false;
 }
 
-bool executeLeftLegStep() {
+bool left_leg_step_forward() {
   switch (leftLegStepState) {
     case 0:
       startServoMove(&left_leg, 20);
@@ -387,7 +393,7 @@ bool executeLeftLegStep() {
   return false;
 }
 
-bool executeRightLegStep() {
+bool right_leg_step_forward() {
   switch (rightLegStepState) {
     case 0:
       startServoMove(&right_leg, 160);
@@ -409,7 +415,7 @@ bool executeRightLegStep() {
   return false;
 }
 
-bool executeTurnRight() {
+bool turn_right() {
   switch (turnRightStepState) {
     case 0:
       // Execute left leg step as part of turn
@@ -460,8 +466,6 @@ void startServoMove(Servo* servo, int angle, int delayMs = default_delay_ms) {
 }
 
 void initializeServos() {
-  // Set all motors to 90 degrees - this will happen gradually as the robot starts
-  left_sholder.write(90);
   left_foot.write(90);
   right_sholder.write(90);
   right_foot.write(90);
@@ -488,3 +492,4 @@ bool is_too_close(){
   if(distance < 10){ return true;}
   else{ return false;}
 }
+  
