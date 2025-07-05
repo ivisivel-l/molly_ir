@@ -16,7 +16,6 @@ RIGHT: Right leg step
 
 */
 
-
 #include <DIYables_IRcontroller.h>
 #include <Servo.h>
 #define IR_RECEIVER_PIN 14 // The Arduino pin connected to IR controller
@@ -30,7 +29,6 @@ Servo left_leg;
 Servo right_leg;
 Servo right_foot;
 Servo left_foot;
-
 
 int default_delay_ms = 2;
 const int trigPin = 2;
@@ -79,6 +77,10 @@ int leftLegStepState = 0;
 int rightLegStepState = 0;
 int turnRightStepState = 0;
 
+// Turn-specific state variables
+int turnLeftLegStepState = 0;
+int turnRightArmStepState = 0;
+
 // Function declarations
 void startServoMove(Servo* servo, int angle, int delayMs = default_delay_ms);
 bool left_arm_step_forward();
@@ -86,6 +88,8 @@ bool right_arm_step_forward();
 bool left_leg_step_forward();
 bool right_leg_step_forward();
 bool turn_right();
+bool turn_left_leg_step();
+bool turn_right_arm_step();
 void do_what_you_are_told_on_ir();
 void handleServoMovement(unsigned long currentMillis);
 void handleRobotStateMachine(unsigned long currentMillis);
@@ -152,10 +156,14 @@ void do_what_you_are_told_on_ir() {
         break;
       case Key17::KEY_2:
         if (robotEnabled) {
-          Serial.println("Starting walk sequence");
-          currentState = LEFT_ARM_STEP;
-          stepSequence = 0;
-          leftArmStepState = 0;
+          if (currentState == IDLE) {
+            Serial.println("Starting walk sequence");
+            currentState = LEFT_ARM_STEP;
+            stepSequence = 0;
+            leftArmStepState = 0;
+          } else {
+            Serial.println("Robot is already walking");
+          }
         }
         break;
       case Key17::KEY_3:
@@ -231,6 +239,8 @@ void handleRobotStateMachine(unsigned long currentMillis) {
         if (navigate && is_too_close()) {
           currentState = TURNING_RIGHT;
           turnRightStepState = 0;
+          turnLeftLegStepState = 0;
+          turnRightArmStepState = 0;
           break;
         }
         
@@ -252,6 +262,8 @@ void handleRobotStateMachine(unsigned long currentMillis) {
         if (navigate && is_too_close()) {
           currentState = TURNING_RIGHT;
           turnRightStepState = 0;
+          turnLeftLegStepState = 0;
+          turnRightArmStepState = 0;
           break;
         }
         
@@ -272,6 +284,8 @@ void handleRobotStateMachine(unsigned long currentMillis) {
         if (navigate && is_too_close()) {
           currentState = TURNING_RIGHT;
           turnRightStepState = 0;
+          turnLeftLegStepState = 0;
+          turnRightArmStepState = 0;
           break;
         }
         
@@ -292,6 +306,8 @@ void handleRobotStateMachine(unsigned long currentMillis) {
         if (navigate && is_too_close()) {
           currentState = TURNING_RIGHT;
           turnRightStepState = 0;
+          turnLeftLegStepState = 0;
+          turnRightArmStepState = 0;
           break;
         }
         
@@ -316,6 +332,8 @@ void handleRobotStateMachine(unsigned long currentMillis) {
           if (navigate && is_too_close()) {
             // Still too close, keep turning
             turnRightStepState = 0;
+            turnLeftLegStepState = 0;
+            turnRightArmStepState = 0;
           } else {
             // Clear path, resume previous activity
             currentState = LEFT_ARM_STEP;  // Resume walking
@@ -415,30 +433,65 @@ bool right_leg_step_forward() {
   return false;
 }
 
+bool turn_left_leg_step() {
+  switch (turnLeftLegStepState) {
+    case 0:
+      startServoMove(&left_leg, 20);
+      turnLeftLegStepState = 1;
+      return false;
+    case 1:
+      startServoMove(&left_foot, 0);
+      turnLeftLegStepState = 2;
+      return false;
+    case 2:
+      startServoMove(&left_leg, 90);
+      turnLeftLegStepState = 3;
+      return false;
+    case 3:
+      startServoMove(&left_foot, 90);
+      turnLeftLegStepState = 0;
+      return true; // Step completed
+  }
+  return false;
+}
+
+bool turn_right_arm_step() {
+  switch (turnRightArmStepState) {
+    case 0:
+      startServoMove(&right_elbow, 180);
+      turnRightArmStepState = 1;
+      return false;
+    case 1:
+      startServoMove(&right_sholder, 0);
+      turnRightArmStepState = 2;
+      return false;
+    case 2:
+      startServoMove(&right_elbow, 90);
+      turnRightArmStepState = 3;
+      return false;
+    case 3:
+      startServoMove(&right_sholder, 90);
+      turnRightArmStepState = 0;
+      return true; // Step completed
+  }
+  return false;
+}
+
 bool turn_right() {
   switch (turnRightStepState) {
     case 0:
       // Execute left leg step as part of turn
-      currentState = LEFT_LEG_STEP;
-      leftLegStepState = 0;
-      turnRightStepState = 1;
+      if (turn_left_leg_step()) {
+        turnRightStepState = 1;
+      }
       return false;
     case 1:
-      if (currentState == LEFT_LEG_STEP) {
-        return false; // Still executing left leg step
+      // Now do right arm step
+      if (turn_right_arm_step()) {
+        turnRightStepState = 0;
+        return true; // Turn completed
       }
-      // Left leg step completed, now do right arm step
-      currentState = RIGHT_ARM_STEP;
-      rightArmStepState = 0;
-      turnRightStepState = 2;
       return false;
-    case 2:
-      if (currentState == RIGHT_ARM_STEP) {
-        return false; // Still executing right arm step
-      }
-      // Turn completed
-      turnRightStepState = 0;
-      return true;
   }
   return false;
 }
@@ -492,4 +545,3 @@ bool is_too_close(){
   if(distance < 10){ return true;}
   else{ return false;}
 }
-  
