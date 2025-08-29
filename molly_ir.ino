@@ -1,5 +1,6 @@
+
 /* Molly the turtuise
-IR controlled version
+IR controlled version - DIAGNOSTIC VERSION
 by Lev Kunin lev.y.kunin@gmail.com
 
 IR Remote Control Features:
@@ -11,9 +12,10 @@ Arrow keys: Manual control of individual limbs
 
 UP: Left arm step
 DOWN: Right arm step
-LEFT: Left leg step
+LEFT: Turn left
 RIGHT: Right leg step
 
+OK: Manual left leg step
 */
 
 #include <DIYables_IRcontroller.h>
@@ -23,7 +25,7 @@ RIGHT: Right leg step
 DIYables_IRcontroller_17 irController(IR_RECEIVER_PIN, 200); // debounce time is 200ms
 Servo right_elbow;
 Servo left_elbow;
-Servo left_sholder;  // create Servo object to control a servo// twelve Servo objects can be created on most boards
+Servo left_sholder;  
 Servo right_sholder;
 Servo left_leg;
 Servo right_leg;
@@ -39,6 +41,7 @@ const bool navigate = 1;
 // Non-blocking timing variables
 unsigned long previousMillis = 0;
 unsigned long servoMoveTime = 0;
+unsigned long lastDiagnosticTime = 0;
 bool robotEnabled = true;
 
 // State machine variables
@@ -48,7 +51,8 @@ enum RobotState {
   RIGHT_ARM_STEP,
   LEFT_LEG_STEP,
   RIGHT_LEG_STEP,
-  TURNING_RIGHT
+  TURNING_RIGHT,
+  TURNING_LEFT
 };
 
 enum ServoMoveState {
@@ -61,7 +65,7 @@ ServoMoveState servoState = SERVO_IDLE;
 
 // Walking sequence variables
 int walkCounter = 0;
-int stepSequence = 0; // 0=left_arm, 1=right_arm, 2=left_leg, 3=right_leg
+int stepSequence = 0;
 
 // Servo movement variables
 Servo* currentServo = nullptr;
@@ -76,10 +80,11 @@ int rightArmStepState = 0;
 int leftLegStepState = 0;
 int rightLegStepState = 0;
 int turnRightStepState = 0;
-
-// Turn-specific state variables
+int turnLeftStepState = 0;
 int turnLeftLegStepState = 0;
 int turnRightArmStepState = 0;
+int turnRightLegStepState = 0;
+int turnLeftArmStepState = 0;
 
 // Function declarations
 void startServoMove(Servo* servo, int angle, int delayMs = default_delay_ms);
@@ -88,28 +93,49 @@ bool right_arm_step_forward();
 bool left_leg_step_forward();
 bool right_leg_step_forward();
 bool turn_right();
+bool turn_left();
 bool turn_left_leg_step();
 bool turn_right_arm_step();
+bool turn_right_leg_step();
+bool turn_left_arm_step();
 void do_what_you_are_told_on_ir();
 void handleServoMovement(unsigned long currentMillis);
 void handleRobotStateMachine(unsigned long currentMillis);
 float get_distance();
 bool is_too_close();
 void initializeServos();
+void diagnosticPrint(unsigned long currentMillis);
 
 void setup() {   
   // distance sensor setup
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
   
-  //IR receiver setup
+  // IR receiver setup
   Serial.begin(9600);
+  
+  // Wait a moment for serial to initialize
+  delay(1000);
+  
+  Serial.println("=== MOLLY ROBOT DIAGNOSTIC MODE ===");
+  Serial.print("IR Receiver Pin: ");
+  Serial.println(IR_RECEIVER_PIN);
+  
+  // Test if pin is properly configured
+  pinMode(IR_RECEIVER_PIN, INPUT);
+  Serial.print("IR Pin state after pinMode: ");
+  Serial.println(digitalRead(IR_RECEIVER_PIN));
+  
+  // Initialize IR controller
+  Serial.println("Initializing IR controller...");
   irController.begin();
+
+  Serial.println("IR controller initialized.");
   
   // attach motors
   right_foot.attach(7);
   left_foot.attach(5);
-  left_sholder.attach(10);  // attaches the servo on pin 9 to the Servo object
+  left_sholder.attach(10);
   right_sholder.attach(9);
   left_elbow.attach(8);
   right_elbow.attach(11);
@@ -120,10 +146,20 @@ void setup() {
   initializeServos();
   
   Serial.println("Robot initialized. Use IR remote to control.");
+  Serial.println("=== DIAGNOSTIC INFO WILL PRINT EVERY 5 SECONDS ===");
+  Serial.println("Expected IR commands:");
+  Serial.println("Key 1: Toggle robot on/off");
+  Serial.println("Key 2: Start walking");
+  Serial.println("Key 3: Stop robot");
+  Serial.println("Arrow keys: Manual limb control");
+  Serial.println("====================================");
 }
 
 void loop() {
   unsigned long currentMillis = millis();
+  
+  // Print diagnostic info every 5 seconds
+  diagnosticPrint(currentMillis);
   
   // Always check for IR commands
   do_what_you_are_told_on_ir();
@@ -138,9 +174,74 @@ void loop() {
   }
 }
 
+void diagnosticPrint(unsigned long currentMillis) {
+  if (currentMillis - lastDiagnosticTime >= 5000) {
+    lastDiagnosticTime = currentMillis;
+    Serial.println("--- DIAGNOSTIC INFO ---");
+    Serial.print("Robot State: ");
+    switch(currentState) {
+      case IDLE: Serial.println("IDLE"); break;
+      case LEFT_ARM_STEP: Serial.println("LEFT_ARM_STEP"); break;
+      case RIGHT_ARM_STEP: Serial.println("RIGHT_ARM_STEP"); break;
+      case LEFT_LEG_STEP: Serial.println("LEFT_LEG_STEP"); break;
+      case RIGHT_LEG_STEP: Serial.println("RIGHT_LEG_STEP"); break;
+      case TURNING_RIGHT: Serial.println("TURNING_RIGHT"); break;
+      case TURNING_LEFT: Serial.println("TURNING_LEFT"); break;
+    }
+    Serial.print("Robot Enabled: ");
+    Serial.println(robotEnabled ? "YES" : "NO");
+    Serial.print("IR Pin Reading: ");
+    Serial.println(digitalRead(IR_RECEIVER_PIN));
+    Serial.print("Distance: ");
+    Serial.print(get_distance());
+    Serial.println(" cm");
+    Serial.println("Waiting for IR commands...");
+    Serial.println("----------------------");
+  }
+  return false;
+}
+
+bool turn_left_arm_step() {
+  switch (turnLeftArmStepState) {
+    case 0:
+      startServoMove(&left_elbow, 0);
+      turnLeftArmStepState = 1;
+      return false;
+    case 1:
+      startServoMove(&left_sholder, 180);
+      turnLeftArmStepState = 2;
+      return false;
+    case 2:
+      startServoMove(&left_elbow, 90);
+      turnLeftArmStepState = 3;
+      return false;
+    case 3:
+      startServoMove(&left_sholder, 90);
+      turnLeftArmStepState = 0;
+      return true;
+  }
+  return false;
+}
+
 void do_what_you_are_told_on_ir() {
   Key17 key = irController.getKey();
+  
+  // DIAGNOSTIC: Print any key detected, even NONE
+  static unsigned long lastKeyCheck = 0;
+  static int keyCheckCount = 0;
+  keyCheckCount++;
+  
+  // Every 1000 checks, print that we're checking
+  if (keyCheckCount >= 1000) {
+    Serial.print(".");  // Print dot to show we're checking IR
+    keyCheckCount = 0;
+  }
+  
   if (key != Key17::NONE) {
+    Serial.println();  // New line after dots
+    Serial.print("IR KEY DETECTED: ");
+    Serial.println((int)key);
+    
     switch (key) {
       case Key17::KEY_1:
         robotEnabled = !robotEnabled;
@@ -185,7 +286,7 @@ void do_what_you_are_told_on_ir() {
           rightArmStepState = 0;
         }
         break;
-      case Key17::KEY_LEFT:
+      case Key17::KEY_OK:
         Serial.println("Manual left leg step");
         if (currentState == IDLE) {
           currentState = LEFT_LEG_STEP;
@@ -199,12 +300,19 @@ void do_what_you_are_told_on_ir() {
           rightLegStepState = 0;
         }
         break;
-      case Key17::KEY_OK :
-        Serial.println("OK");
-        // TODO: YOUR CONTROL
+      case Key17::KEY_LEFT:
+        Serial.println("Turn LEFT command");
+        if (robotEnabled && currentState == IDLE) {
+          currentState = TURNING_LEFT;
+          turnLeftStepState = 0;
+          turnRightLegStepState = 0;
+          turnLeftArmStepState = 0;
+        }
         break;
 
       default:
+        Serial.print("Unknown key: ");
+        Serial.println((int)key);
         break;
     }
   }
@@ -335,10 +443,19 @@ void handleRobotStateMachine(unsigned long currentMillis) {
             turnLeftLegStepState = 0;
             turnRightArmStepState = 0;
           } else {
-            // Clear path, resume previous activity
-            currentState = LEFT_ARM_STEP;  // Resume walking
+            currentState = LEFT_ARM_STEP;
             leftArmStepState = 0;
           }
+        }
+      }
+      break;
+      
+    case TURNING_LEFT:
+      if (servoState == SERVO_IDLE) {
+        if (turn_left()) {
+          // Turn completed, return to idle or continue walking
+          currentState = LEFT_ARM_STEP;
+          leftArmStepState = 0;
         }
       }
       break;
@@ -362,7 +479,7 @@ bool left_arm_step_forward() {
     case 3:
       startServoMove(&left_sholder, 90);
       leftArmStepState = 0;
-      return true; // Step completed
+      return true;
   }
   return false;
 }
@@ -384,7 +501,7 @@ bool right_arm_step_forward() {
     case 3:
       startServoMove(&right_sholder, 90);
       rightArmStepState = 0;
-      return true; // Step completed
+      return true;
   }
   return false;
 }
@@ -406,7 +523,7 @@ bool left_leg_step_forward() {
     case 3:
       startServoMove(&left_foot, 90);
       leftLegStepState = 0;
-      return true; // Step completed
+      return true;
   }
   return false;
 }
@@ -428,7 +545,7 @@ bool right_leg_step_forward() {
     case 3:
       startServoMove(&right_foot, 90);
       rightLegStepState = 0;
-      return true; // Step completed
+      return true;
   }
   return false;
 }
@@ -450,7 +567,7 @@ bool turn_left_leg_step() {
     case 3:
       startServoMove(&left_foot, 90);
       turnLeftLegStepState = 0;
-      return true; // Step completed
+      return true;
   }
   return false;
 }
@@ -472,7 +589,7 @@ bool turn_right_arm_step() {
     case 3:
       startServoMove(&right_sholder, 90);
       turnRightArmStepState = 0;
-      return true; // Step completed
+      return true;
   }
   return false;
 }
@@ -489,6 +606,25 @@ bool turn_right() {
       // Now do right arm step
       if (turn_right_arm_step()) {
         turnRightStepState = 0;
+        return true;
+      }
+      return false;
+  }
+  return false;
+}
+
+bool turn_left() {
+  switch (turnLeftStepState) {
+    case 0:
+      // Execute right leg step as part of left turn
+      if (turn_right_leg_step()) {
+        turnLeftStepState = 1;
+      }
+      return false;
+    case 1:
+      // Now do left arm step
+      if (turn_left_arm_step()) {
+        turnLeftStepState = 0;
         return true; // Turn completed
       }
       return false;
