@@ -258,25 +258,27 @@ void do_what_you_are_told_on_ir() {
       case Key17::KEY_2:
         if (robotEnabled) {
           if (currentState == IDLE) {
-            Serial.println("Starting walk sequence");
+            Serial.println("Manual left arm step");
             currentState = LEFT_ARM_STEP;
             stepSequence = 0;
             leftArmStepState = 0;
           } else {
-            Serial.println("Robot is already walking");
+            break;
           }
+      case Key17::KEY_3:
+        Serial.println("Manual left leg step");
+        if (currentState == IDLE) {
+          currentState = LEFT_LEG_STEP;
+          leftLegStepState = 0;
         }
         break;
-      case Key17::KEY_3:
-        Serial.println("Stopping robot");
-        currentState = IDLE;
-        servoState = SERVO_IDLE;
-        break;
       case Key17::KEY_UP:
-        Serial.println("Manual left arm step");
+        Serial.println("Starting walk sequence");
         if (currentState == IDLE) {
           currentState = LEFT_ARM_STEP;
           leftArmStepState = 0;
+            Serial.println("Robot is already walking");
+          }
         }
         break;
       case Key17::KEY_DOWN:
@@ -287,14 +289,12 @@ void do_what_you_are_told_on_ir() {
         }
         break;
       case Key17::KEY_OK:
-        Serial.println("Manual left leg step");
-        if (currentState == IDLE) {
-          currentState = LEFT_LEG_STEP;
-          leftLegStepState = 0;
-        }
+        Serial.println("Stopping robot");        
+        currentState = IDLE;
+        servoState = SERVO_IDLE;
         break;
       case Key17::KEY_RIGHT:
-        Serial.println("Manual right leg step");
+        Serial.println("Turn RIGHT command");
         if (currentState == IDLE) {
           currentState = RIGHT_LEG_STEP;
           rightLegStepState = 0;
@@ -612,6 +612,29 @@ bool turn_right() {
   }
   return false;
 }
+
+bool turn_right_leg_step() {
+  switch (turnRightLegStepState) {
+    case 0:
+      startServoMove(&right_leg, 160);
+      turnRightLegStepState = 1;
+      return false;
+    case 1:
+      startServoMove(&right_foot, 180);
+      turnRightLegStepState = 2;
+      return false;
+    case 2:
+      startServoMove(&right_leg, 90);
+      turnRightLegStepState = 3;
+      return false;
+    case 3:
+      startServoMove(&right_foot, 90);
+      turnRightLegStepState = 0;
+      return true; // Step completed
+  }
+  return false;
+}
+
 
 bool turn_left() {
   switch (turnLeftStepState) {
